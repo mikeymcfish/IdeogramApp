@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ideogram JSON Studio</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <main id="workspace" class="workspace">
+        <aside id="scenePanel" class="panel scene-panel" aria-label="Scene controls">
+          <details class="panel-section collapsible" open>
+            <summary class="section-title">Canvas Size</summary>
+            <div class="collapsible-content compact-grid">
+              <label>
+                <span>Width</span>
+                <input id="canvasWidth" type="number" min="64" max="16384" step="16" value="1024">
+              </label>
+              <label>
+                <span>Height</span>
+                <input id="canvasHeight" type="number" min="64" max="16384" step="16" value="1024">
+              </label>
+            </div>
+          </details>
+
+          <details class="panel-section collapsible" open>
+            <summary class="section-title">High Level &amp; Background</summary>
+            <div class="collapsible-content">
+              <div class="field-group">
+                <div class="mini-row">
+                  <label class="field-label" for="highLevel">High level</label>
+                  <button id="captureHighLevel" class="small-button" type="button">Capture</button>
+                </div>
+                <textarea id="highLevel" rows="3" placeholder="Optional one sentence overview"></textarea>
+              </div>
+              <label>
+                <span>Background</span>
+                <textarea id="background" rows="4" placeholder="Scene background description"></textarea>
+              </label>
+            </div>
+          </details>
+
+          <details class="panel-section collapsible" open>
+            <summary class="section-title">Style</summary>
+            <div class="collapsible-content">
+              <label>
+                <span>Mode</span>
+                <select id="styleMode">
+                  <option value="none">None</option>
+                  <option value="photo">Photo</option>
+                  <option value="art_style">Art style</option>
+                </select>
+              </label>
+              <label>
+                <span>Aesthetics</span>
+                <input id="aesthetics" type="text" placeholder="minimal, editorial, premium">
+              </label>
+              <label>
+                <span>Lighting</span>
+                <input id="lighting" type="text" placeholder="soft studio light">
+              </label>
+              <label>
+                <span>Medium</span>
+                <input id="medium" type="text" placeholder="photograph, graphic_design">
+              </label>
+              <label id="photoField">
+                <span>Photo</span>
+                <input id="photo" type="text" placeholder="35mm product photograph">
+              </label>
+              <label id="artStyleField">
+                <span>Art style</span>
+                <input id="artStyle" type="text" placeholder="flat vector, watercolor">
+              </label>
+              <div>
+                <div class="mini-row">
+                  <span class="field-label">Style palette</span>
+                  <button id="addStyleColor" class="small-button" type="button">Add</button>
+                </div>
+                <div id="stylePalette" class="palette-row" aria-label="Style color palette"></div>
+              </div>
+            </div>
+          </details>
+        </aside>
+
+        <section class="stage-column" aria-label="Canvas editor">
+          <div class="stage-header">
+            <div class="stage-header-main">
+              <div class="sidebar-switches" aria-label="Sidebar visibility">
+                <button id="toggleLeftSidebar" class="nav-button sidebar-toggle" type="button" title="Collapse scene controls" aria-label="Collapse scene controls" aria-controls="scenePanel" aria-expanded="true">
+                  <span class="sidebar-toggle-icon left-sidebar-icon" aria-hidden="true"></span>
+                </button>
+                <button id="toggleRightSidebar" class="nav-button sidebar-toggle" type="button" title="Collapse prompt and output controls" aria-label="Collapse prompt and output controls" aria-controls="inspectorPanel" aria-expanded="true">
+                  <span class="sidebar-toggle-icon right-sidebar-icon" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div>
+                <strong id="canvasReadout">1024 x 1024</strong>
+                <span id="selectionReadout">No box selected</span>
+              </div>
+            </div>
+            <div class="stage-header-actions">
+              <div class="stage-nav" aria-label="Canvas navigation">
+                <button id="zoomOut" class="nav-button" type="button" title="Zoom out" aria-label="Zoom out">-</button>
+                <span id="zoomReadout">100%</span>
+                <button id="zoomIn" class="nav-button" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+                <button id="fitCanvas" class="nav-button wide" type="button" title="Fit canvas" aria-label="Fit canvas">Fit</button>
+                <button id="canvasLock" class="nav-button lock-button" type="button" title="Lock selected box" aria-label="Lock selected box" aria-pressed="false">
+                  <span class="lock-glyph" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div id="statusLine" role="status" aria-live="polite"></div>
+            </div>
+          </div>
+          <div id="stageShell" class="stage-shell" tabindex="0">
+            <div class="canvas-toolbar" role="toolbar" aria-label="Canvas actions">
+              <span class="canvas-brand" title="Ideogram JSON Studio" role="img" aria-label="Ideogram JSON Studio"></span>
+              <span class="toolbar-divider" aria-hidden="true"></span>
+              <button class="tool-button icon-button is-active" data-tool="select" type="button" title="Select and move boxes" aria-label="Select and move boxes">
+                <span class="tool-icon icon-cursor" aria-hidden="true"></span>
+              </button>
+              <button class="tool-button icon-button" data-tool="obj" type="button" title="Draw object box" aria-label="Draw object box">
+                <span class="tool-icon icon-object" aria-hidden="true"></span>
+              </button>
+              <button class="tool-button icon-button" data-tool="text" type="button" title="Draw text box" aria-label="Draw text box">
+                <span class="tool-icon icon-text" aria-hidden="true"></span>
+              </button>
+              <button id="duplicateElement" class="icon-button" type="button" title="Duplicate selected box" aria-label="Duplicate selected box">
+                <span class="tool-icon icon-duplicate" aria-hidden="true"></span>
+              </button>
+              <button id="deleteElement" class="icon-button" type="button" title="Delete selected box" aria-label="Delete selected box">
+                <span class="tool-icon icon-delete" aria-hidden="true"></span>
+              </button>
+              <span class="toolbar-divider" aria-hidden="true"></span>
+              <button id="chooseBackground" class="icon-button" type="button" title="Choose background reference image" aria-label="Choose background reference image">
+                <span class="tool-icon icon-image" aria-hidden="true"></span>
+              </button>
+              <button id="clearBackground" class="icon-button" type="button" title="Clear background reference image" aria-label="Clear background reference image">
+                <span class="tool-icon icon-clear-image" aria-hidden="true"></span>
+              </button>
+              <label class="toolbar-range" title="Background brightness">
+                <span class="tool-icon icon-brightness" aria-hidden="true"></span>
+                <input id="backgroundBrightness" type="range" min="10" max="100" step="5" value="70" aria-label="Background brightness">
+              </label>
+              <input id="backgroundFile" type="file" accept="image/*" hidden>
+              <span class="toolbar-divider" aria-hidden="true"></span>
+              <button id="copyJson" class="icon-button" type="button" title="Copy JSON to clipboard" aria-label="Copy JSON to clipboard">
+                <span class="tool-icon icon-copy-json" aria-hidden="true"></span>
+              </button>
+              <button id="downloadJson" class="icon-button" type="button" title="Download JSON file" aria-label="Download JSON file">
+                <span class="tool-icon icon-download" aria-hidden="true"></span>
+              </button>
+              <button id="resetApp" class="icon-button danger" type="button" title="Reset the current document" aria-label="Reset the current document">
+                <span class="tool-icon icon-reset" aria-hidden="true"></span>
+              </button>
+            </div>
+            <section id="inlineBoxEditor" class="canvas-inspector is-hidden" aria-label="Inline box editor">
+              <div class="inline-editor-header">
+                <div id="inlineEditorTitle" class="section-title">Edit Box</div>
+                <button id="closeInlineEditor" class="icon-button inline-close" type="button" title="Close box editor" aria-label="Close box editor">
+                  <span class="tool-icon icon-delete" aria-hidden="true"></span>
+                </button>
+              </div>
+              <label class="editor-utility">
+                <span>Box</span>
+                <select id="elementSelector">
+                  <option value="">No box selected</option>
+                </select>
+              </label>
+              <label>
+                <span>Type</span>
+                <select id="elementType">
+                  <option value="obj">Object</option>
+                  <option value="text">Text</option>
+                </select>
+              </label>
+              <label id="elementTextField">
+                <span>Rendered text</span>
+                <input id="elementText" type="text" placeholder="Text to render">
+              </label>
+              <label>
+                <span>Description</span>
+                <textarea id="elementDesc" rows="4" placeholder="What should appear inside this box"></textarea>
+              </label>
+              <div class="box-grid editor-geometry">
+                <label>
+                  <span>X</span>
+                  <input id="boxX" type="number" min="0" step="1">
+                </label>
+                <label>
+                  <span>Y</span>
+                  <input id="boxY" type="number" min="0" step="1">
+                </label>
+                <label>
+                  <span>W</span>
+                  <input id="boxW" type="number" min="1" step="1">
+                </label>
+                <label>
+                  <span>H</span>
+                  <input id="boxH" type="number" min="1" step="1">
+                </label>
+              </div>
+              <div>
+                <div class="mini-row">
+                  <span class="field-label">Box palette</span>
+                  <button id="addElementColor" class="small-button" type="button">Add</button>
+                </div>
+                <div id="elementPalette" class="palette-row" aria-label="Selected element color palette"></div>
+              </div>
+              <div class="layer-controls" aria-label="Layer order">
+                <span class="field-label">Layer</span>
+                <div class="layer-buttons">
+                  <button id="layerToBack" class="icon-button layer-button" type="button" title="Send selected box to back" aria-label="Send selected box to back">
+                    <span class="tool-icon icon-layer-to-back" aria-hidden="true"></span>
+                  </button>
+                  <button id="layerBackward" class="icon-button layer-button" type="button" title="Move selected box backward" aria-label="Move selected box backward">
+                    <span class="tool-icon icon-layer-backward" aria-hidden="true"></span>
+                  </button>
+                  <button id="layerForward" class="icon-button layer-button" type="button" title="Move selected box forward" aria-label="Move selected box forward">
+                    <span class="tool-icon icon-layer-forward" aria-hidden="true"></span>
+                  </button>
+                  <button id="layerToFront" class="icon-button layer-button" type="button" title="Bring selected box to front" aria-label="Bring selected box to front">
+                    <span class="tool-icon icon-layer-to-front" aria-hidden="true"></span>
+                  </button>
+                </div>
+              </div>
+            </section>
+            <canvas id="stage" width="1024" height="1024"></canvas>
+            <div id="dropHint" class="drop-hint">Drop images on the canvas</div>
+          </div>
+          <div class="element-strip">
+            <div class="strip-header">
+              <span>Elements</span>
+              <button id="addElement" class="small-button" type="button">Add Box</button>
+            </div>
+            <div id="elementList" class="element-list"></div>
+          </div>
+        </section>
+
+        <aside id="inspectorPanel" class="panel inspector-panel" aria-label="Prompt and output controls">
+          <section class="panel-section">
+            <div class="section-title">Prompt Assistant</div>
+            <label>
+              <span>Provider</span>
+              <select id="llmProvider">
+                <option value="ollama">Local Ollama</option>
+                <option value="huggingface">Hugging Face</option>
+              </select>
+            </label>
+            <div id="ollamaSettings">
+              <label>
+                <span>Ollama URL</span>
+                <input id="ollamaUrl" type="url" value="http://127.0.0.1:11434">
+              </label>
+              <label>
+                <span>Text model</span>
+                <input id="ollamaTextModel" type="text" value="qwen3-vl:8b">
+              </label>
+              <label>
+                <span>Vision model</span>
+                <input id="ollamaVisionModel" type="text" value="qwen3-vl:8b">
+              </label>
+              <div class="button-row">
+                <button id="testOllamaApi" type="button">Test Ollama</button>
+              </div>
+              <div id="ollamaDiagnostics" class="diagnostics" aria-live="polite">Ollama test has not run.</div>
+            </div>
+            <div id="hfSettings">
+              <label>
+                <span>HF endpoint</span>
+                <input id="hfEndpoint" type="url" value="https://router.huggingface.co/v1/chat/completions">
+              </label>
+              <label>
+                <span>HF model</span>
+                <input id="hfModel" type="text" value="Qwen/Qwen3-VL-8B-Instruct">
+              </label>
+              <label>
+                <span>API token</span>
+                <input id="hfToken" type="password" autocomplete="off">
+              </label>
+              <div class="button-row">
+                <button id="testHfApi" type="button">Test HF</button>
+              </div>
+              <div id="llmDiagnostics" class="diagnostics" aria-live="polite">HF test has not run.</div>
+            </div>
+            <div class="assistant-option-group">
+              <div class="field-label">Enhance</div>
+              <div class="checkbox-grid" aria-label="Enhance targets">
+                <label class="check-option">
+                  <input type="checkbox" name="enhanceTarget" value="selected" checked>
+                  <span>Selected box</span>
+                </label>
+                <label class="check-option">
+                  <input type="checkbox" name="enhanceTarget" value="highLevel">
+                  <span>High level</span>
+                </label>
+                <label class="check-option">
+                  <input type="checkbox" name="enhanceTarget" value="background">
+                  <span>Background</span>
+                </label>
+                <label class="check-option">
+                  <input type="checkbox" name="enhanceTarget" value="fullJson">
+                  <span>Full JSON</span>
+                </label>
+              </div>
+            </div>
+            <div class="assistant-option-group">
+              <div class="field-label">Focus</div>
+              <div class="checkbox-grid" aria-label="Vision focus">
+                <label class="check-option">
+                  <input type="checkbox" name="visionFocus" value="whole image" checked>
+                  <span>Whole image</span>
+                </label>
+                <label class="check-option">
+                  <input type="checkbox" name="visionFocus" value="background only">
+                  <span>Background</span>
+                </label>
+                <label class="check-option">
+                  <input type="checkbox" name="visionFocus" value="person only">
+                  <span>Person</span>
+                </label>
+                <label class="check-option">
+                  <input type="checkbox" name="visionFocus" value="object only">
+                  <span>Object</span>
+                </label>
+              </div>
+            </div>
+            <div class="assistant-option-group">
+              <div class="field-label">Rewrite</div>
+              <div class="checkbox-grid" aria-label="Rewrite fields">
+                <label class="check-option">
+                  <input type="checkbox" name="rewriteTarget" value="desc" checked>
+                  <span>Descriptions</span>
+                </label>
+                <label class="check-option">
+                  <input type="checkbox" name="rewriteTarget" value="text">
+                  <span>Text</span>
+                </label>
+                <label class="check-option">
+                  <input type="checkbox" name="rewriteTarget" value="palette">
+                  <span>Palettes</span>
+                </label>
+              </div>
+            </div>
+            <div class="button-row">
+              <button id="enhancePrompt" type="button">Enhance</button>
+              <button id="describeImage" type="button">Describe Image</button>
+            </div>
+          </section>
+
+          <section class="panel-section">
+            <div class="section-title">Agent Control</div>
+            <label>
+              <span>Brief</span>
+              <textarea id="agentBrief" rows="3" placeholder="Poster for a midnight synthwave show"></textarea>
+            </label>
+            <div class="button-row">
+              <button id="designAgentLayout" type="button">Design Layout</button>
+              <button id="copyAgentLink" type="button">Copy Link</button>
+            </div>
+            <label>
+              <span>Command JSON</span>
+              <textarea id="agentCommand" rows="5" spellcheck="false" placeholder='{"action":"apply_layout","layout":{...}}'></textarea>
+            </label>
+            <button id="applyAgentCommand" type="button">Apply Command</button>
+          </section>
+
+          <section class="panel-section output-section">
+            <div class="section-title">ComfyUI JSON</div>
+            <textarea id="jsonOutput" rows="15" spellcheck="false"></textarea>
+            <div class="button-row">
+              <button id="importJson" type="button">Import JSON</button>
+              <button id="formatJson" type="button">Format</button>
+            </div>
+            <div id="validationList" class="validation-list" aria-live="polite"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="agent-layout-core.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
