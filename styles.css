@@ -891,12 +891,20 @@ label span,
   gap: 10px;
 }
 
+.box-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .layer-buttons {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
+.split-button,
 .layer-button {
   width: 28px;
   min-width: 28px;
@@ -906,10 +914,33 @@ label span,
   background: rgba(255, 255, 255, 0.62);
 }
 
+.split-button .tool-icon,
 .layer-button .tool-icon {
   width: 16px;
   height: 16px;
   position: relative;
+}
+
+.icon-split-box::before,
+.icon-split-box::after {
+  content: "";
+  position: absolute;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+
+.icon-split-box::before {
+  left: 1px;
+  top: 1px;
+  width: 7px;
+  height: 7px;
+}
+
+.icon-split-box::after {
+  right: 1px;
+  bottom: 1px;
+  width: 7px;
+  height: 7px;
 }
 
 .icon-layer-backward::before,

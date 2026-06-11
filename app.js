@@ -123,6 +123,7 @@ function bindElements() {
     "boxH",
     "elementPalette",
     "addElementColor",
+    "splitSelectedBox",
     "layerToBack",
     "layerBackward",
     "layerForward",
@@ -267,6 +268,7 @@ function bindEvents() {
     selected.palette.push(nextPaletteColor(selected.palette.length));
     renderAll();
   });
+  els.splitSelectedBox.addEventListener("click", splitSelectedImageBox);
   els.layerToBack.addEventListener("click", () => moveSelectedLayer("back"));
   els.layerBackward.addEventListener("click", () => moveSelectedLayer("backward"));
   els.layerForward.addEventListener("click", () => moveSelectedLayer("forward"));
@@ -464,6 +466,7 @@ function updateInlineBoxEditor() {
 
   els.inlineEditorTitle.textContent = `${elementIndexLabel(selected)}. ${selected.type === "text" ? "Text" : "Object"}`;
   els.elementTextField.classList.toggle("is-hidden", selected.type !== "text");
+  updateSplitBoxControl(selected);
   positionInlineBoxEditor();
 }
 
@@ -503,6 +506,15 @@ function updateLayerControls(selected = getSelectedElement()) {
   els.layerBackward.disabled = atBack;
   els.layerForward.disabled = atFront;
   els.layerToFront.disabled = atFront;
+}
+
+function updateSplitBoxControl(selected = getSelectedElement()) {
+  if (!els.splitSelectedBox) return;
+  const canSplit = canSplitBox(selected);
+  els.splitSelectedBox.disabled = !canSplit;
+  els.splitSelectedBox.title = canSplit
+    ? "Split selected image into detected boxes"
+    : "Select an image-backed box or a box over a reference image";
 }
 
 function moveSelectedLayer(direction) {
@@ -1366,6 +1378,7 @@ function hydrateSelectedControls() {
   ].forEach((id) => {
     els[id].disabled = disabled;
   });
+  updateSplitBoxControl(selected);
 
   if (!selected) {
     els.elementType.value = "obj";
@@ -2126,6 +2139,45 @@ async function describeImage() {
   }
 }
 
+async function splitSelectedImageBox() {
+  try {
+    const selected = getSelectedElement();
+    if (!selected) throw new Error("Select a box first.");
+    if (!canSplitBox(selected)) {
+      throw new Error("Select an image-backed box or a box over a reference image.");
+    }
+
+    setBusy(true, "Detecting boxes");
+    const source = await getSplitBoxImageSource(selected);
+    const response = await callVisionLlmWithImages([source], buildSplitBoxPrompt(selected));
+    const detections = normalizeSplitDetections(extractJson(response));
+    if (!detections.length) throw new Error("No usable boxes were detected.");
+    const children = createDetectedChildBoxes(selected, detections);
+    if (!children.length) throw new Error("Detected boxes were too small or invalid.");
+
+    const parentIndex = state.elements.findIndex((element) => element.id === selected.id);
+    state.elements.splice(parentIndex + 1, 0, ...children);
+    state.selectedId = children[0].id;
+    inlineEditorOpen = true;
+    renderAll();
+    setStatus(`Split into ${children.length} boxes`);
+  } catch (error) {
+    setStatus(error.message || "Box split failed");
+  } finally {
+    setBusy(false);
+  }
+}
+
+function canSplitBox(element) {
+  if (!element) return false;
+  return Boolean(element.imageDataUrl || (state.backgroundImage && state.backgroundImage.dataUrl));
+}
+
+async function getSplitBoxImageSource(element) {
+  if (element.imageDataUrl) return element.imageDataUrl;
+  return cropBackgroundToElement(element);
+}
+
 function collectCanvasImageSources() {
   const sources = [];
   if (state.backgroundImage && state.backgroundImage.dataUrl) {
@@ -2249,6 +2301,106 @@ function buildHighLevelCapturePrompt(imageSources) {
     "Canvas image references:",
     imageList
   ].join("\n");
+}
+
+function buildSplitBoxPrompt(element) {
+  return [
+    "Detect separate, movable Ideogram layout objects in this selected image region.",
+    "Return only valid JSON. Do not include markdown fences or comments.",
+    "Use this exact schema:",
+    "{\"objects\":[{\"label\":\"person|bicycle|object\",\"bbox\":[ymin,xmin,ymax,xmax],\"desc\":\"concise visual description\",\"color_palette\":[\"#RRGGBB\"]}]}",
+    "bbox values must be integers on a 0-1000 grid relative to this image, in [ymin,xmin,ymax,xmax] order.",
+    "Split combined subjects into separate instances. Example: two people on bikes should produce four boxes: person, bicycle, person, bicycle.",
+    "Prefer people, bicycles, vehicles, animals, held objects, products, signs, and other major separable objects.",
+    "Do not return a single box for the whole image unless there is only one separable object.",
+    "Limit to 12 objects. Skip background scenery and tiny unimportant details.",
+    "Descriptions should be prompt-ready and specific enough to rearrange the item later.",
+    `Current selected-box description: ${element.desc || "(blank)"}`,
+    `Canvas background: ${state.background || "(blank)"}`
+  ].join("\n");
+}
+
+function normalizeSplitDetections(payload) {
+  const rawItems = Array.isArray(payload)
+    ? payload
+    : payload && (payload.objects || payload.elements || payload.boxes || payload.detections || payload.items);
+  if (!Array.isArray(rawItems)) return [];
+  return rawItems
+    .map((item, index) => {
+      const bbox = normalizeSplitBBox(item && (item.bbox || item.box || item.coordinates || item));
+      if (!bbox) return null;
+      const label = cleanLlmText(item.label || item.name || item.class || item.type || `object ${index + 1}`);
+      const desc = cleanLlmText(item.desc || item.description || item.caption || label);
+      return {
+        label: label || `object ${index + 1}`,
+        desc: desc || label || `object ${index + 1}`,
+        bbox,
+        palette: cleanPalette(item.color_palette || item.palette || [])
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function normalizeSplitBBox(raw) {
+  let ymin;
+  let xmin;
+  let ymax;
+  let xmax;
+  if (Array.isArray(raw) && raw.length >= 4) {
+    [ymin, xmin, ymax, xmax] = raw.map(Number);
+  } else if (raw && typeof raw === "object") {
+    if (["ymin", "xmin", "ymax", "xmax"].every((key) => Object.prototype.hasOwnProperty.call(raw, key))) {
+      ymin = Number(raw.ymin);
+      xmin = Number(raw.xmin);
+      ymax = Number(raw.ymax);
+      xmax = Number(raw.xmax);
+    } else if (["y", "x", "h", "w"].every((key) => Object.prototype.hasOwnProperty.call(raw, key))) {
+      ymin = Number(raw.y);
+      xmin = Number(raw.x);
+      ymax = ymin + Number(raw.h);
+      xmax = xmin + Number(raw.w);
+    }
+  }
+  if (![ymin, xmin, ymax, xmax].every(Number.isFinite)) return null;
+  ymin = clamp(Math.round(ymin), 0, 1000);
+  xmin = clamp(Math.round(xmin), 0, 1000);
+  ymax = clamp(Math.round(ymax), 0, 1000);
+  xmax = clamp(Math.round(xmax), 0, 1000);
+  if (ymax < ymin) [ymin, ymax] = [ymax, ymin];
+  if (xmax < xmin) [xmin, xmax] = [xmax, xmin];
+  if (ymax - ymin < 12 || xmax - xmin < 12) return null;
+  return [ymin, xmin, ymax, xmax];
+}
+
+function createDetectedChildBoxes(parent, detections) {
+  return detections
+    .map((item, index) => {
+      const [ymin, xmin, ymax, xmax] = item.bbox;
+      const x = parent.x + parent.w * xmin / 1000;
+      const y = parent.y + parent.h * ymin / 1000;
+      const w = parent.w * (xmax - xmin) / 1000;
+      const h = parent.h * (ymax - ymin) / 1000;
+      if (w < 0.01 || h < 0.01) return null;
+      return createElement({
+        type: "obj",
+        x: clamp(x, 0, 0.99),
+        y: clamp(y, 0, 0.99),
+        w: clamp(w, 0.01, 1),
+        h: clamp(h, 0.01, 1),
+        desc: item.desc,
+        palette: item.palette.length ? item.palette : [paletteForDetectedLabel(item.label, index)]
+      });
+    })
+    .filter(Boolean);
+}
+
+function paletteForDetectedLabel(label, index) {
+  const value = String(label || "").toLowerCase();
+  if (value.includes("person") || value.includes("rider") || value.includes("human")) return "#E35C3F";
+  if (value.includes("bike") || value.includes("bicycle") || value.includes("cycle")) return "#147D75";
+  if (value.includes("vehicle") || value.includes("car") || value.includes("motorcycle")) return "#F0B84A";
+  return nextPaletteColor(index + 1);
 }
 
 function buildFullJsonPrompt(rewrite = defaultRewriteOptions()) {
@@ -2799,10 +2951,11 @@ function cleanLlmText(text) {
 }
 
 function setBusy(isBusy, message = "") {
-  [els.captureHighLevel, els.enhancePrompt, els.describeImage, els.testOllamaApi, els.testHfApi].forEach((button) => {
+  [els.captureHighLevel, els.enhancePrompt, els.describeImage, els.splitSelectedBox, els.testOllamaApi, els.testHfApi].forEach((button) => {
     if (!button) return;
     button.disabled = isBusy;
   });
+  if (!isBusy) updateSplitBoxControl();
   if (message) setStatus(message);
 }
 

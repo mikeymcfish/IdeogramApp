@@ -10,6 +10,7 @@ Open `index.html` in a browser. The app does not need a build step.
 - Edit normalized Ideogram boxes visually while exporting `[ymin, xmin, ymax, xmax]` on the 0-1000 grid.
 - Add optional per-box and style color palettes with uppercase `#RRGGBB` output.
 - Drag images onto the canvas to create image-backed boxes.
+- Split a selected image-backed box into separate detected object boxes with the configured vision model.
 - Load a background reference image and crop selected boxes for vision description.
 - Generate, import, copy, and download the full ComfyUI-ready JSON.
 - Enhance prompts through local Ollama or Hugging Face's OpenAI-compatible Inference Providers endpoint.
